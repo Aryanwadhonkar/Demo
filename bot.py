@@ -11,15 +11,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Environment variables
-API_ID = os.getenv("API_ID")
-API_HASH = os.getenv("API_HASH")
 MONGODB_URL = os.getenv("MONGODB_URL")
-URL_SHORTNER = os.getenv("URL_SHORTNER")
-URL_SHORTNER_API = os.getenv("URL_SHORTNER_API")
-OWNER_ID = int(os.getenv("OWNER_ID"))
-ADMINS_ID = list(map(int, os.getenv("ADMINS_ID").split(',')))
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-PORT = int(os.getenv("PORT"))
 CHANNEL_ID = os.getenv("CHANNEL_ID")  # Add your private channel ID here
 
 # Initialize MongoDB client
@@ -58,13 +51,13 @@ def upload(update: Update, context: CallbackContext):
             "access_link": access_link
         })
 
-        update.message.reply_text(f"File uploaded successfully to the channel! Access it here: {access_link}")
+        update.message.reply_text(f"File uploaded successfully! Access it here: {access_link}")
     else:
         update.message.reply_text("Please send a document.")
 
 def generate_access_link(file_id, user_id):
     token = create_token(user_id)  # Create a 24-hour token
-    access_link = f"https://yourbot.com/access?file_id={file_id}&token={token}"  # Replace with your bot's URL
+    access_link = f"https://yourwebservice.com/access?file_id={file_id}&token={token}"  # Replace with your web service URL
     return access_link
 
 def create_token(user_id):
@@ -73,36 +66,17 @@ def create_token(user_id):
     db.tokens.insert_one({"token": token, "user_id": user_id, "expires_at": expiration_time})
     return token
 
-def get_file(update: Update, context: CallbackContext):
-    if len(context.args) != 1:
-        update.message.reply_text("Usage: /getfile <file_id>")
-        return
-
-    file_id = context.args[0]
-    file_data = db.files.find_one({"file_id": file_id})
-
-    if file_data:
-        update.message.reply_text(f"File found: {file_data['file_name']}. You can access it in the channel.")
-    else:
-        update.message.reply_text("File not found.")
-
-def shorten_url(update: Update, context: CallbackContext):
-    if len(context.args) != 1:
-        update.message.reply_text("Usage: /shorten <url>")
-        return
-
-    long_url = context.args[0]
-    response = requests.post(URL_SHORTNER, json={"long_url": long_url, "api_token": URL_SHORTNER_API})
+def access_media(file_id, token):
+    token_data = db.tokens.find_one({"token": token})
     
-    if response.status_code == 200:
-        short_url = response.json().get("short_url")
-        update.message.reply_text(f"Shortened URL: {short_url}")
+    if token_data and token_data['expires_at'] > time.time():
+        # Logic to retrieve the file based on file_id
+        file_data = db.files.find_one({"file_id": file_id})
+        if file_data:
+            file_path = os.path.join("uploaded_files", file_data['file_name'])  # Adjust as necessary
+            return send_file(file_path)  # Serve the file
     else:
-        update.message.reply_text("Failed to shorten URL.")
-
-def auto_delete_media(update: Update, context: CallbackContext):
-    time.sleep(900)  # 15 minutes
-    context.bot.delete_message(chat_id=update.message.chat_id, message_id=update.message.message_id)
+        return "Access denied or token expired", 403
 
 def main():
     updater = Updater(BOT_TOKEN)
@@ -111,4 +85,10 @@ def main():
     # Register command handlers
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("upload", upload))
-    dp.add_handler(CommandHandler("getfile", get
+    
+    # Start the bot
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == '__main__':
+    main()
