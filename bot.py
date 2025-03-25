@@ -6,8 +6,10 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, Callb
 from pymongo import MongoClient
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
+# Environment variables
 API_ID = os.getenv("API_ID")
 API_HASH = os.getenv("API_HASH")
 MONGODB_URL = os.getenv("MONGODB_URL")
@@ -19,6 +21,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT"))
 CHANNEL_ID = os.getenv("CHANNEL_ID")  # Add your private channel ID here
 
+# Initialize MongoDB client
 client = MongoClient(MONGODB_URL)
 db = client['file_database']
 
@@ -89,12 +92,14 @@ def main():
     updater = Updater(BOT_TOKEN)
     dp = updater.dispatcher
 
+    # Register command handlers
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("upload", upload))
     dp.add_handler(CommandHandler("getfile", get_file))
     dp.add_handler(CommandHandler("shorten", shorten_url))
     dp.add_handler(MessageHandler(Filters.document, upload))
     
+    # Start the bot
     updater.start_polling()
     updater.idle()
 
