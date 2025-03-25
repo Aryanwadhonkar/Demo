@@ -17,6 +17,7 @@ OWNER_ID = int(os.getenv("OWNER_ID"))
 ADMINS_ID = list(map(int, os.getenv("ADMINS_ID").split(',')))
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT"))
+CHANNEL_ID = os.getenv("CHANNEL_ID")  # Add your private channel ID here
 
 client = MongoClient(MONGODB_URL)
 db = client['file_database']
@@ -31,9 +32,25 @@ def upload(update: Update, context: CallbackContext):
 
     if update.message.document:
         file = update.message.document.get_file()
-        file.download()
-        db.files.insert_one({"file_id": update.message.document.file_id, "user_id": update.message.from_user.id})
-        update.message.reply_text("File uploaded successfully!")
+        file_name = update.message.document.file_name
+        file_path = os.path.join("uploaded_files", file_name)
+
+        # Download the file to the local filesystem
+        file.download(file_path)
+
+        # Send the file to the private channel
+        with open(file_path, 'rb') as f:
+            context.bot.send_document(chat_id=CHANNEL_ID, document=f, caption=f"Uploaded by {update.message.from_user.first_name}: {file_name}")
+
+        # Store metadata in MongoDB
+        db.files.insert_one({
+            "file_id": update.message.document.file_id,
+            "user_id": update.message.from_user.id,
+            "file_name": file_name,
+            "timestamp": time.time()
+        })
+
+        update.message.reply_text("File uploaded successfully to the channel!")
     else:
         update.message.reply_text("Please send a document.")
 
@@ -46,9 +63,7 @@ def get_file(update: Update, context: CallbackContext):
     file_data = db.files.find_one({"file_id": file_id})
 
     if file_data:
-        file = context.bot.get_file(file_id)
-        file.download()
-        update.message.reply_document(open(file.file_path, 'rb'))
+        update.message.reply_text(f"File found: {file_data['file_name']}. You can access it in the channel.")
     else:
         update.message.reply_text("File not found.")
 
