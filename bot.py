@@ -1,5 +1,6 @@
 import os
 import time
+import uuid
 import requests
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
@@ -45,17 +46,32 @@ def upload(update: Update, context: CallbackContext):
         with open(file_path, 'rb') as f:
             context.bot.send_document(chat_id=CHANNEL_ID, document=f, caption=f"Uploaded by {update.message.from_user.first_name}: {file_name}")
 
+        # Generate a unique access link for the file
+        access_link = generate_access_link(file.file_id, update.message.from_user.id)
+
         # Store metadata in MongoDB
         db.files.insert_one({
-            "file_id": update.message.document.file_id,
+            "file_id": file.file_id,
             "user_id": update.message.from_user.id,
             "file_name": file_name,
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "access_link": access_link
         })
 
-        update.message.reply_text("File uploaded successfully to the channel!")
+        update.message.reply_text(f"File uploaded successfully to the channel! Access it here: {access_link}")
     else:
         update.message.reply_text("Please send a document.")
+
+def generate_access_link(file_id, user_id):
+    token = create_token(user_id)  # Create a 24-hour token
+    access_link = f"https://yourbot.com/access?file_id={file_id}&token={token}"  # Replace with your bot's URL
+    return access_link
+
+def create_token(user_id):
+    token = str(uuid.uuid4())  # Generate a unique token
+    expiration_time = time.time() + 86400  # Token valid for 24 hours
+    db.tokens.insert_one({"token": token, "user_id": user_id, "expires_at": expiration_time})
+    return token
 
 def get_file(update: Update, context: CallbackContext):
     if len(context.args) != 1:
@@ -95,13 +111,4 @@ def main():
     # Register command handlers
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("upload", upload))
-    dp.add_handler(CommandHandler("getfile", get_file))
-    dp.add_handler(CommandHandler("shorten", shorten_url))
-    dp.add_handler(MessageHandler(Filters.document, upload))
-    
-    # Start the bot
-    updater.start_polling()
-    updater.idle()
-
-if __name__ == '__main__':
-    main()
+    dp.add_handler(CommandHandler("getfile", get
