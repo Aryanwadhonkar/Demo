@@ -1,5 +1,5 @@
-# Use the official Python image
-FROM python:3.9-slim
+# Use an official Python base image
+FROM python:3.10.12
 
 # Set the working directory
 WORKDIR /app
@@ -7,14 +7,11 @@ WORKDIR /app
 # Copy the requirements file
 COPY requirements.txt .
 
-# Install the required packages
+# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the bot source code
+# Copy the rest of your application code
 COPY . .
 
-# Expose the port for Flask
-EXPOSE 5000
-
 # Command to run the bot
-CMD ["python", "bot.py"]
+CMD ["python", "main.py"]
