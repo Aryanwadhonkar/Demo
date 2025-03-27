@@ -3,6 +3,10 @@ import logging
 from flask import Flask, request, send_file
 from telegram import Update, InputFile
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from dotenv import load_dotenv  # Import dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Set up logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -11,10 +15,10 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 app = Flask(__name__)
 
 # Bot configuration
-API_ID = 'YOUR_API_ID'
-API_HASH = 'YOUR_API_HASH'
-CHANNEL_ID = 'YOUR_CHANNEL_ID'
-BOT_TOKEN = 'YOUR_BOT_TOKEN'
+API_ID = os.getenv('API_ID')
+API_HASH = os.getenv('API_HASH')
+CHANNEL_ID = os.getenv('CHANNEL_ID')
+BOT_TOKEN = os.getenv('BOT_TOKEN')
 
 # Create a directory to store files
 if not os.path.exists('files'):
