@@ -14,9 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY bot.py .
 
 # Set environment variables (you can also set these in your deployment environment)
-ENV TELEGRAM_BOT_TOKEN=<your_bot_token>
-ENV WEBHOOK_URL=<your_webhook_url>
-ENV ADMIN_IDS=<comma_separated_admin_ids>
+ENV TELEGRAM_BOT_TOKEN=7709318237:AAE9gL7l7V9Q0ZUSUGO0XfmoS5JDMi6Km-c
+ENV WEBHOOK_URL=https://latin-tracey-wleaks-9a7fe5ea.koyeb.app/7709318237:AAE9gL7l7V9Q0ZUSUGO0XfmoS5JDMi6Km-c
+ENV ADMIN_IDS=1672634667
 
 # Expose the port for the Flask app
 EXPOSE 5000
