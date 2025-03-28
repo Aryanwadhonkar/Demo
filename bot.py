@@ -1,101 +1,100 @@
 import os
 import time
-import logging
-import threading
-from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, Defaults
+import json
+import requests
+from flask import Flask, request
+from telegram import Update, Bot
+from telegram.ext import CommandHandler, MessageHandler, Filters, CallbackContext, Updater
 from dotenv import load_dotenv
-from error_handler import log_error, handle_invalid_token, handle_file_not_found, handle_generic_error
+import threading
 
 load_dotenv()
 
-# Load environment variables
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHANNEL_ID = os.getenv("CHANNEL_ID")  # Use the channel username or ID
-ADMIN_IDS = [123456789, 987654321]  # Replace with actual Telegram user IDs of admins
-TOKEN_VALIDITY = 86400  # 24 hours in seconds
-MEDIA_LIFETIME = 600  # 600 seconds
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+PORT = int(os.getenv("PORT", 5000))
+ADMIN_IDS = list(map(int, os.getenv("ADMIN_IDS", "").split(',')))  # Comma-separated admin IDs
 
-# Set up logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+app = Flask(__name__)
+bot = Bot(token=TOKEN)
 
-# In-memory storage for user tokens and files
+# Store files and user tokens
+file_storage = {}
 user_tokens = {}
-sent_files = {}
 
-def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Welcome! Use /gettoken to get your access token.')
+# Function to generate a token for users
+def generate_token(user_id):
+    return f"token_{user_id}"
 
-def get_token(update: Update, context: CallbackContext) -> None:
-    user_id = update.message.from_user.id
-    if user_id in ADMIN_IDS:
-        update.message.reply_text('As an admin, you do not need a token to upload files.')
-        return
+# Command to start the bot
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text("Welcome! Use /get_token to get your access token.")
 
-    if user_id in user_tokens and time.time() < user_tokens[user_id]['expiry']:
-        update.message.reply_text(f'Your token is still valid: {user_tokens[user_id]["token"]}')
+# Command to upload files (only for admins)
+def upload(update: Update, context: CallbackContext):
+    if update.message.from_user.id in ADMIN_IDS:
+        file = update.message.document
+        if file:
+            file_id = file.file_id
+            file_storage[file_id] = {
+                "file": file,
+                "timestamp": time.time()
+            }
+            update.message.reply_text(f"File {file.file_name} uploaded successfully.")
     else:
-        # Generate a new token
-        token = f'token_{user_id}_{int(time.time())}'
-        user_tokens[user_id] = {'token': token, 'expiry': time.time() + TOKEN_VALIDITY}
-        update.message.reply_text(f'Your new token is: {token}')
+        update.message.reply_text("You are not authorized to upload files.")
 
-def save_file(update: Update, context: CallbackContext) -> None:
+# Command to get a token
+def get_token(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
-    if user_id not in ADMIN_IDS:
-        # Check if the user has a valid token
-        if user_id not in user_tokens or time.time() >= user_tokens[user_id]['expiry']:
-            update.message.reply_text('You need a valid token to upload files. Use /gettoken to get one.')
-            return
+    token = generate_token(user_id)
+    user_tokens[user_id] = {
+        "token": token,
+        "timestamp": time.time()
+    }
+    update.message.reply_text(f"Your token is: {token}. It will expire in 24 hours.")
 
-    try:
-        file = update.message.document.get_file()
-        file_name = update.message.document.file_name
-        file.download(file_name)
+# Function to handle incoming messages
+def handle_message(update: Update, context: CallbackContext):
+    user_id = update.message.from_user.id
+    if user_id in user_tokens:
+        if time.time() - user_tokens[user_id]["timestamp"] < 86400:  # 24 hours
+            # Handle file access logic here
+            update.message.reply_text("You can access files using the provided links.")
+        else:
+            update.message.reply_text("Your token has expired. Please get a new one using /get_token.")
+    else:
+        update.message.reply_text("You need to get a token first using /get_token.")
 
-        # Send file to the private channel
-        context.bot.send_document(chat_id=CHANNEL_ID, document=open(file_name, 'rb'))
-        
-        # Store the file and start a thread to delete it after MEDIA_LIFETIME
-        sent_files[file_name] = time.time()
-        threading.Thread(target=delete_file_after_timeout, args=(file_name,)).start()
-        
-        update.message.reply_text('File saved in the private channel!')
-    except Exception as e:
-        logging.error(f"Error saving file: {e}")
-        handle_generic_error(update, context)
+# Auto-delete files after 600 seconds
+def auto_delete_files():
+    while True:
+        current_time = time.time()
+        for file_id, file_info in list(file_storage.items()):
+            if current_time - file_info["timestamp"] > 600:
+                del file_storage[file_id]
+        time.sleep(60)
 
-def delete_file_after_timeout(file_name: str) -> None:
-    time.sleep(MEDIA_LIFETIME)
-    if file_name in sent_files:
-        try:
-            os.remove(file_name)  # Delete the file from the local storage
-            del sent_files[file_name]  # Remove from the tracking dictionary
-            logging.info(f'Deleted file: {file_name}')
-        except FileNotFoundError:
-            logging.warning(f'File not found for deletion: {file_name}')
-        except Exception as e:
-            logging.error(f"Error deleting file: {e}")
+# Set up the webhook
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+    dispatcher.process_update(update)
+    return "ok"
 
-def main() -> None:
-    # Set up the bot with a custom timeout and other defaults
-    defaults = Defaults(parse_mode='HTML', timeout=10)  # Timeout is in seconds
-    updater = Updater(TELEGRAM_TOKEN, defaults=defaults)
-    
+if __name__ == "__main__":
+    updater = Updater(token=TOKEN, use_context=True)
     dispatcher = updater.dispatcher
 
     dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("gettoken", get_token))
-    dispatcher.add_handler(MessageHandler(Filters.document, save_file))
+    dispatcher.add_handler(CommandHandler("upload", upload))
+    dispatcher.add_handler(CommandHandler("get_token", get_token))
+    dispatcher.add_handler(MessageHandler(Filters.document, handle_message))
 
-    # Error handlers
-    dispatcher.add_error_handler(log_error)
-    dispatcher.add_error_handler(handle_invalid_token)
-    dispatcher.add_error_handler(handle_file_not_found)
-    dispatcher.add_error_handler(handle_generic_error)
+    # Start the auto-delete thread
+    threading.Thread(target=auto_delete_files, daemon=True).start()
 
-    updater.start_polling()
-    updater.idle()
+    # Set webhook
+    bot.set_webhook(url=WEBHOOK_URL)
 
-if __name__ == '__main__':
-    main()
+    app.run(host="0.0.0.0", port=PORT)
