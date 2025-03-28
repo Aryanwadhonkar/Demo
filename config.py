@@ -1,5 +1,0 @@
-API_ID = 'your_api_id'
-API_HASH = 'your_api_hash'
-CHANNEL_ID = 'your_channel_id'
-BOT_TOKEN = 'your_bot_token'
-OWNER_ID = '1672634667'
