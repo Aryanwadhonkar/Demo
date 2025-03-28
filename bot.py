@@ -2,9 +2,10 @@ import os
 import time
 import logging
 import threading
-from telegram import Update, InputFile
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, Defaults
 from dotenv import load_dotenv
+from error_handler import log_error, handle_invalid_token, handle_file_not_found, handle_generic_error
 
 load_dotenv()
 
@@ -40,36 +41,35 @@ def save_file(update: Update, context: CallbackContext) -> None:
         update.message.reply_text('Only admins can save files.')
         return
 
-    file = update.message.document.get_file()
-    file_name = update.message.document.file_name
-    file.download(file_name)
+    try:
+        file = update.message.document.get_file()
+        file_name = update.message.document.file_name
+        file.download(file_name)
 
-    # Send file to the channel
-    context.bot.send_document(chat_id=CHANNEL_ID, document=open(file_name, 'rb'))
-    
-    # Store the file and start a thread to delete it after MEDIA_LIFETIME
-    sent_files[file_name] = time.time()
-    threading.Thread(target=delete_file_after_timeout, args=(file_name,)).start()
-    
-    update.message.reply_text('File saved!')
+        # Send file to the channel
+        context.bot.send_document(chat_id=CHANNEL_ID, document=open(file_name, 'rb'))
+        
+        # Store the file and start a thread to delete it after MEDIA_LIFETIME
+        sent_files[file_name] = time.time()
+        threading.Thread(target=delete_file_after_timeout, args=(file_name,)).start()
+        
+        update.message.reply_text('File saved!')
+    except Exception as e:
+        logging.error(f"Error saving file: {e}")
+        handle_generic_error(update, context)
 
 def delete_file_after_timeout(file_name: str) -> None:
     time.sleep(MEDIA_LIFETIME)
     if file_name in sent_files:
-        os.remove(file_name)  # Delete the file from the local storage
-        del sent_files[file_name]  # Remove from the tracking dictionary
-        logging.info(f'Deleted file: {file_name}')
+        try:
+            os.remove(file_name)  # Delete the file from the local storage
+            del sent_files[file_name]  # Remove from the tracking dictionary
+            logging.info(f'Deleted file: {file_name}')
+        except FileNotFoundError:
+            logging.warning(f'File not found for deletion: {file_name}')
+        except Exception as e:
+            logging.error(f"Error deleting file: {e}")
 
 def main() -> None:
-    updater = Updater(TELEGRAM_TOKEN)
-    dispatcher = updater.dispatcher
-
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("gettoken", get_token))
-    dispatcher.add_handler(MessageHandler(Filters.document, save_file))
-
-    updater.start_polling()
-    updater.idle()
-
-if __name__ == '__main__':
-    main()
+    # Set up the bot with a custom timeout and other defaults
+    defaults = Defaults(parse_mode='HTML', timeout=10)
