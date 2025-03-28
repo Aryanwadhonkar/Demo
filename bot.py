@@ -7,13 +7,14 @@ from telegram import Update, Bot
 from telegram.ext import CommandHandler, MessageHandler, Filters, CallbackContext, Updater
 from dotenv import load_dotenv
 import threading
+from error_handler import log_error  # Import the error handler
 
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 PORT = int(os.getenv("PORT", 5000))
-ADMIN_IDS = list(map(int, os.getenv("ADMIN_IDS", "").split(',')))  # Comma-separated admin IDs
+ADMIN_IDS = list(map(int, os.getenv("ADMIN_IDS", "").split(',')))
 
 app = Flask(__name__)
 bot = Bot(token=TOKEN)
@@ -59,7 +60,6 @@ def handle_message(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
     if user_id in user_tokens:
         if time.time() - user_tokens[user_id]["timestamp"] < 86400:  # 24 hours
-            # Handle file access logic here
             update.message.reply_text("You can access files using the provided links.")
         else:
             update.message.reply_text("Your token has expired. Please get a new one using /get_token.")
@@ -91,10 +91,6 @@ if __name__ == "__main__":
     dispatcher.add_handler(CommandHandler("get_token", get_token))
     dispatcher.add_handler(MessageHandler(Filters.document, handle_message))
 
-    # Start the auto-delete thread
-    threading.Thread(target=auto_delete_files, daemon=True).start()
-
-    # Set webhook
-    bot.set_webhook(url=WEBHOOK_URL)
-
-    app.run(host="0.0.0.0", port=PORT)
+    # Add the error handler
+    dispatcher.add_error_handler(log_error)
+    
