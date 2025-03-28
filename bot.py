@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+import threading
 from telegram import Update, InputFile
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 from dotenv import load_dotenv
@@ -10,15 +11,16 @@ load_dotenv()
 # Load environment variables
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
-URL_SHORTENER_API = os.getenv("URL_SHORTENER_API")
+ADMIN_ID = int(os.getenv("ADMIN_ID"))
 TOKEN_VALIDITY = 86400  # 24 hours in seconds
 MEDIA_LIFETIME = 600  # 600 seconds
 
 # Set up logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# In-memory storage for user tokens
+# In-memory storage for user tokens and files
 user_tokens = {}
+sent_files = {}
 
 def start(update: Update, context: CallbackContext) -> None:
     update.message.reply_text('Welcome! Use /gettoken to get your access token.')
@@ -28,7 +30,7 @@ def get_token(update: Update, context: CallbackContext) -> None:
     if user_id in user_tokens and time.time() < user_tokens[user_id]['expiry']:
         update.message.reply_text(f'Your token is still valid: {user_tokens[user_id]["token"]}')
     else:
-        # Generate a new token (you can implement a more secure token generation)
+        # Generate a new token
         token = f'token_{user_id}_{int(time.time())}'
         user_tokens[user_id] = {'token': token, 'expiry': time.time() + TOKEN_VALIDITY}
         update.message.reply_text(f'Your new token is: {token}')
@@ -39,14 +41,24 @@ def save_file(update: Update, context: CallbackContext) -> None:
         return
 
     file = update.message.document.get_file()
-    file.download()
+    file_name = update.message.document.file_name
+    file.download(file_name)
+
     # Send file to the channel
-    context.bot.send_document(chat_id=CHANNEL_ID, document=open(update.message.document.file_name, 'rb'))
+    context.bot.send_document(chat_id=CHANNEL_ID, document=open(file_name, 'rb'))
+    
+    # Store the file and start a thread to delete it after MEDIA_LIFETIME
+    sent_files[file_name] = time.time()
+    threading.Thread(target=delete_file_after_timeout, args=(file_name,)).start()
+    
     update.message.reply_text('File saved!')
 
-def access_file(update: Update, context: CallbackContext) -> None:
-    # Logic to handle file access based on the link clicked
-    pass
+def delete_file_after_timeout(file_name: str) -> None:
+    time.sleep(MEDIA_LIFETIME)
+    if file_name in sent_files:
+        os.remove(file_name)  # Delete the file from the local storage
+        del sent_files[file_name]  # Remove from the tracking dictionary
+        logging.info(f'Deleted file: {file_name}')
 
 def main() -> None:
     updater = Updater(TELEGRAM_TOKEN)
