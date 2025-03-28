@@ -12,7 +12,7 @@ load_dotenv()
 # Load environment variables
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
-ADMIN_ID = int(os.getenv("ADMIN_ID"))
+ADMIN_IDS = [123456789, 987654321]  # Replace with actual Telegram user IDs of admins
 TOKEN_VALIDITY = 86400  # 24 hours in seconds
 MEDIA_LIFETIME = 600  # 600 seconds
 
@@ -37,7 +37,8 @@ def get_token(update: Update, context: CallbackContext) -> None:
         update.message.reply_text(f'Your new token is: {token}')
 
 def save_file(update: Update, context: CallbackContext) -> None:
-    if update.message.from_user.id != ADMIN_ID:
+    user_id = update.message.from_user.id
+    if user_id not in ADMIN_IDS:
         update.message.reply_text('Only admins can save files.')
         return
 
@@ -72,4 +73,23 @@ def delete_file_after_timeout(file_name: str) -> None:
 
 def main() -> None:
     # Set up the bot with a custom timeout and other defaults
-    defaults = Defaults(parse_mode='HTML', timeout=10)
+    defaults = Defaults(parse_mode='HTML', timeout=10)  # Timeout is in seconds
+    updater = Updater(TELEGRAM_TOKEN, defaults=defaults)
+    
+    dispatcher = updater.dispatcher
+
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(CommandHandler("gettoken", get_token))
+    dispatcher.add_handler(MessageHandler(Filters.document, save_file))
+
+    # Error handlers
+    dispatcher.add_error_handler(log_error)
+    dispatcher.add_error_handler(handle_invalid_token)
+    dispatcher.add_error_handler(handle_file_not_found)
+    dispatcher.add_error_handler(handle_generic_error)
+
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == '__main__':
+    main()
