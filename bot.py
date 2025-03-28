@@ -28,6 +28,10 @@ def start(update: Update, context: CallbackContext) -> None:
 
 def get_token(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
+    if user_id in ADMIN_IDS:
+        update.message.reply_text('As an admin, you do not need a token to upload files.')
+        return
+
     if user_id in user_tokens and time.time() < user_tokens[user_id]['expiry']:
         update.message.reply_text(f'Your token is still valid: {user_tokens[user_id]["token"]}')
     else:
@@ -39,8 +43,10 @@ def get_token(update: Update, context: CallbackContext) -> None:
 def save_file(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     if user_id not in ADMIN_IDS:
-        update.message.reply_text('Only admins can save files.')
-        return
+        # Check if the user has a valid token
+        if user_id not in user_tokens or time.time() >= user_tokens[user_id]['expiry']:
+            update.message.reply_text('You need a valid token to upload files. Use /gettoken to get one.')
+            return
 
     try:
         file = update.message.document.get_file()
