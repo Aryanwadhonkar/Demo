@@ -11,7 +11,7 @@ load_dotenv()
 
 # Load environment variables
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHANNEL_ID = os.getenv("CHANNEL_ID")
+CHANNEL_ID = os.getenv("CHANNEL_ID")  # Use the channel username or ID
 ADMIN_IDS = [123456789, 987654321]  # Replace with actual Telegram user IDs of admins
 TOKEN_VALIDITY = 86400  # 24 hours in seconds
 MEDIA_LIFETIME = 600  # 600 seconds
@@ -47,14 +47,14 @@ def save_file(update: Update, context: CallbackContext) -> None:
         file_name = update.message.document.file_name
         file.download(file_name)
 
-        # Send file to the channel
+        # Send file to the private channel
         context.bot.send_document(chat_id=CHANNEL_ID, document=open(file_name, 'rb'))
         
         # Store the file and start a thread to delete it after MEDIA_LIFETIME
         sent_files[file_name] = time.time()
         threading.Thread(target=delete_file_after_timeout, args=(file_name,)).start()
         
-        update.message.reply_text('File saved!')
+        update.message.reply_text('File saved in the private channel!')
     except Exception as e:
         logging.error(f"Error saving file: {e}")
         handle_generic_error(update, context)
