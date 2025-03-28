@@ -1,97 +1,64 @@
 import os
-import logging
-from flask import Flask, request, send_file
+import time
+import requests
 from telegram import Update, InputFile
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
-from dotenv import load_dotenv
-import uuid
 
-# Load environment variables from .env file
-load_dotenv()
+# Constants
+TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'
+CHANNEL_ID = '@your_private_channel'
+LINK_SHORTENER_API = 'https://api.urlshortener.com/shorten'
+DEV_API_KEY = 'YOUR_DEV_API_KEY'
+TOKEN_VALIDITY = 86400  # 24 hours in seconds
+MEDIA_LIFETIME = 600  # 600 seconds
 
-# Set up logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+# In-memory storage for user tokens
+user_tokens = {}
 
-# Initialize Flask app
-app = Flask(__name__)
-
-# Bot configuration
-API_ID = os.getenv('API_ID')
-API_HASH = os.getenv('API_HASH')
-CHANNEL_ID = os.getenv('CHANNEL_ID')
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-OWNER_ID = int(os.getenv('OWNER_ID'))  # Add your Telegram user ID here
-
-# Create a directory to store files
-if not os.path.exists('files'):
-    os.makedirs('files')
-
-# Dictionary to store file links
-file_links = {}
-
-# Function to start the bot
 def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Welcome! You can send me files to store.')
+    update.message.reply_text('Welcome! Use /upload to upload files.')
 
-# Function to handle file uploads
-def handle_file(update: Update, context: CallbackContext) -> None:
-    if update.message.from_user.id != OWNER_ID:
-        update.message.reply_text('You are not authorized to upload files.')
+def upload(update: Update, context: CallbackContext) -> None:
+    if update.message.from_user.id not in user_tokens:
+        update.message.reply_text('You need a valid token to upload files. Use /get_token.')
         return
 
-    file = update.message.document.get_file()
-    file_id = str(uuid.uuid4())  # Generate a unique ID for the file
-    file_path = os.path.join('files', f"{file_id}_{update.message.document.file_name}")
-    file.download(file_path)
+    if update.message.document:
+        file = update.message.document.get_file()
+        file.download()
+        # Send file to the private channel
+        context.bot.send_document(chat_id=CHANNEL_ID, document=open(update.message.document.file_name, 'rb'))
+        # Generate a link for the user
+        link = generate_link(update.message.document.file_name)
+        update.message.reply_text(f'File uploaded! Access it here: {link}')
+        # Schedule auto-delete
+        time.sleep(MEDIA_LIFETIME)
+        os.remove(update.message.document.file_name)
 
-    # Send the file to the channel
-    with open(file_path, 'rb') as f:
-        context.bot.send_document(chat_id=CHANNEL_ID, document=InputFile(f, filename=update.message.document.file_name))
+def generate_link(file_name: str) -> str:
+    # Shorten the link using the URL shortener API
+    response = requests.post(LINK_SHORTENER_API, json={'url': f'https://t.me/{CHANNEL_ID}/{file_name}', 'api_key': DEV_API_KEY})
+    return response.json().get('shortened_url')
 
-    # Store the link
-    file_links[file_id] = file_path
-
-    update.message.reply_text(f'File {update.message.document.file_name} has been uploaded! Access it using /file_{file_id}')
-
-# Function to handle errors
-def error(update: Update, context: CallbackContext) -> None:
-    logging.warning(f'Update {update} caused error {context.error}')
-
-# Function to access files via links
-def access_file(update: Update, context: CallbackContext) -> None:
-    if len(context.args) != 1:
-        update.message.reply_text('Please provide a valid file ID.')
-        return
-
-    file_id = context.args[0]
-    if file_id in file_links:
-        file_path = file_links[file_id]
-        with open(file_path, 'rb') as f:
-            update.message.reply_document(document=InputFile(f, filename=os.path.basename(file_path)))
+def get_token(update: Update, context: CallbackContext) -> None:
+    user_id = update.message.from_user.id
+    if user_id in user_tokens and time.time() - user_tokens[user_id] < TOKEN_VALIDITY:
+        update.message.reply_text('You already have a valid token.')
     else:
-        update.message.reply_text('File not found.')
+        # Generate a new token
+        user_tokens[user_id] = time.time()
+        update.message.reply_text('Your token has been generated!')
 
-# Set up the bot
-def main():
-    updater = Updater(BOT_TOKEN)
+def main() -> None:
+    updater = Updater(TOKEN)
     dispatcher = updater.dispatcher
 
     dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(MessageHandler(Filters.document, handle_file))
-    dispatcher.add_handler(CommandHandler("file_", access_file))  # Add command to access files
-    dispatcher.add_error_handler(error)
+    dispatcher.add_handler(CommandHandler("upload", upload))
+    dispatcher.add_handler(CommandHandler("get_token", get_token))
 
     updater.start_polling()
     updater.idle()
 
-# Flask route to serve files
-@app.route('/files/<filename>', methods=['GET'])
-def serve_file(filename):
-    return send_file(os.path.join('files', filename), as_attachment=True)
-
 if __name__ == '__main__':
-    from threading import Thread
-    # Start the bot in a separate thread
-    Thread(target=main).start()
-    # Start the Flask app
-    app.run(host='0.0.0.0', port=5000)
+    main()
