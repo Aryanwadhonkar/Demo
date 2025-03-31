@@ -17,7 +17,7 @@ class Settings:
     URL_SHORTENER_DOMAIN = os.getenv("URL_SHORTENER_DOMAIN")
     URL_SHORTENER_API = os.getenv("URL_SHORTENER_API")
     ADMINS = [int(x.strip()) for x in os.getenv("ADMINS", "").split(",") if x.strip()]
-    DEFAULT_LANGUAGE = "en" # You can expand upon this later
+    DEFAULT_LANGUAGE = "en"  # You can expand upon this later
     LANGUAGE_OPTIONS = {
         "en": "English",
         "hi": "Hindi",
