@@ -4,13 +4,14 @@ from telegram import Update
 from telegram.ext import CommandHandler, CallbackContext
 
 from config import settings
+import random
 
 logger = logging.getLogger(__name__)
 
 async def funfact(update: Update, context: CallbackContext) -> None:
     """Handles the /funfact command with personality."""
     chat_id = update.effective_chat.id
-    #personality = group_settings.get(chat_id, {}).get("personality", "makima")
+    # personality = group_settings.get(chat_id, {}).get("personality", "makima") #this is the reason for the error
 
     try:
         response = requests.get("https://uselessfacts.jsph.pl/random.json?language=en", timeout=5)
@@ -18,12 +19,12 @@ async def funfact(update: Update, context: CallbackContext) -> None:
         data = response.json()
         fun_fact = data.get("text", "Could not retrieve a fun fact at this time.")
 
-        #if personality == "makima":
+        # if personality == "makima":
         fun_fact_response = f"Interesting. Did you know this: {fun_fact}? Make sure you remember it."
-        #elif personality == "random":
-        #    fun_fact_response = f"Did you know this: {fun_fact}"
-        #else:
-        #   fun_fact_response = fun_fact
+        # elif personality == "random":
+        # fun_fact_response = f"Did you know this: {fun_fact}"
+        # else:
+        # fun_fact_response = fun_fact
         await update.message.reply_text(fun_fact_response)
 
     except requests.exceptions.RequestException as e:
@@ -33,20 +34,20 @@ async def funfact(update: Update, context: CallbackContext) -> None:
 async def advice(update: Update, context: CallbackContext) -> None:
     """Handles the /advice command with personality."""
     chat_id = update.effective_chat.id
-    #personality = group_settings.get(chat_id, {}).get("personality", "makima")
+    # personality = group_settings.get(chat_id, {}).get("personality", "makima")# this is the reason for the error
 
     try:
         response = requests.get("https://api.adviceslip.com/advice", timeout=5)
-        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+        response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
         data = response.json()
         advice_text = data.get("slip", {}).get("advice", "Could not retrieve advice at this time.")
 
-        #if personality == "makima":
+        # if personality == "makima":
         advice_response = f"Listen closely. This is the advice I give you: {advice_text} Heed it well."
-        #elif personality == "random":
-        #  advice_response = f"Here is a piece of advice: {advice_text}"
-        #else:
-        #    advice_response = advice_text
+        # elif personality == "random":
+        # advice_response = f"Here is a piece of advice: {advice_text}"
+        # else:
+        # advice_response = advice_text
 
         await update.message.reply_text(advice_response)
 
@@ -68,7 +69,7 @@ async def meme(update: Update, context: CallbackContext) -> None:
     """Handles the /meme command."""
     try:
         response = requests.get("https://meme-api.com/gimme", timeout=5)
-        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+        response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
         data = response.json()
         meme_url = data.get("url", None)
 
@@ -105,4 +106,3 @@ coinflip_handler = CommandHandler("coinflip", coinflip)
 roll_handler = CommandHandler("roll", roll)
 meme_handler = CommandHandler("meme", meme)
 joke_handler = CommandHandler("joke", joke)
-  
