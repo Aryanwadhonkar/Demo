@@ -242,7 +242,7 @@ async def lastbatch(update: Update, context: CallbackContext) -> None:
     special_link = f"https://t.me/{context.bot.username}?start={token}"
     special_link = shorten_url(special_link)
     await update.message.reply_text(f"Batch stored!\nToken Link: {special_link}", disable_web_page_preview=True)
-    await context.bot.send_message(chat_id=LOG_CHANNEL, text=f"Admin {update.effective_user.id} stored a batch. Token: {token}")
+        await context.bot.send_message(chat_id=LOG_CHANNEL, text=f"Admin {update.effective_user.id} stored a batch. Token: {token}")
     context.user_data["batch_files"] = []  # Reset batch mode
 
 @admin_only
@@ -286,7 +286,7 @@ async def ban(update: Update, context: CallbackContext) -> None:
         user_id = int(context.args[0])
         banned_users.add(user_id)
         await update.message.reply_text(f"User {user_id} has been banned.")
-        await context.bot.send_message(chat_id=LOG_CHANNEL, text=f"User {user_id} banned by admin {update.effective_user.id}")
+        await context.bot.send_message(chat_id=LOG_CHANNEL, text=f"User {update.effective_user.id} banned by admin {update.effective_user.id}")
     except ValueError:
         await update.message.reply_text("Invalid user ID.")
 
@@ -303,7 +303,7 @@ async def premiummembers(update: Update, context: CallbackContext) -> None:
             premium_members.add(user_id)
             await update.message.reply_text(f"User {user_id} is now a premium member.")
         elif action == "remove":
-            premium_members.discard(user_id)
+            premium_members.discard(premium_members)
             await update.message.reply_text(f"User {user_id} has been removed from premium members.")
         else:
             await update.message.reply_text("Invalid action. Use add or remove.")
@@ -346,8 +346,7 @@ async def report(update: Update, context: CallbackContext) -> None:
         logger.error("Error sending report: " + str(e))
         await update.message.reply_text("Failed to submit your report. Please try again later.")
 
-#chunk2
-async def funfact(update: Update, context: CallbackContext) -> None:
+     async def funfact(update: Update, context: CallbackContext) -> None:
     """Handles the /funfact command with personality."""
     chat_id = update.effective_chat.id
     personality = group_settings.get(chat_id, {}).get("personality", "makima")
@@ -434,9 +433,9 @@ async def joke(update: Update, context: CallbackContext) -> None:
     except requests.exceptions.RequestException as e:
         logger.error(f"Error fetching joke: {e}")
         await update.message.reply_text("Failed to retrieve a joke. Please try again later.")
-        #chunk3
 
-async def group_message_handler(update: Update, context: CallbackContext) -> None:
+
+     async def group_message_handler(update: Update, context: CallbackContext) -> None:
     """Handles messages in group chats, applying the configured personality and filter."""
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id  # Get user ID
@@ -524,125 +523,6 @@ async def post_initializer(application: Application) -> None:
         BotCommand("stats", "Show bot statistics (admin only)"),
         BotCommand("ban", "Ban a user (admin only)"),
         BotCommand("premiummembers", "Manage premium members (admin only)"),
-        BotCommand("restart", "Restart the bot (admin only)"),
-        BotCommand("language", "Set your language"),
-        BotCommand("report", "Report a problem or request a feature"),
-        BotCommand("funfact", "Get a random fun fact"),  # New command
-        BotCommand("advice", "Get some advice"),  # New command
-        BotCommand("coinflip", "Flip a coin!"), # New fun command
-        BotCommand("roll", "Roll a dice!"),# New Fun Command
-        BotCommand("meme", "Get a random meme"), # New Fun Command
-        BotCommand("joke", "Tell me a joke!"),# New Fun Command
+        BotCommand("restart", "Restart the bot"),
+Now, here's the completed `requirements.txt`:
 
-    ]
-    await application.bot.set_my_commands(commands)
-
-async def new_member_handler(update: Update, context: CallbackContext) -> None:
-    """Handles new chat members joining the group."""
-    new_members = update.message.new_chat_members
-    chat_id = update.effective_chat.id
-
-    for member in new_members:
-        if member.is_bot:
-            # A bot was added, configure the bot
-            keyboard = [[InlineKeyboardButton("Set Personality", callback_data="set_personality")], [InlineKeyboardButton("Set Filter Level", callback_data="set_filter_level")]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text("Thank you for adding me! Admin, please configure my personality and filter level:", reply_markup=reply_markup)
-        else:
-            # A user joined, welcome them (optional)
-            welcome_message = f"Welcome, {member.first_name}, to the group!"
-            await context.bot.send_message(chat_id, welcome_message)
-
-async def left_member_handler(update: Update, context: CallbackContext) -> None:
-    """Handles chat members leaving the group."""
-    chat_id = update.effective_chat.id
-    user = update.message.left_chat_member
-
-    # Check if a user or bot left
-    if user.is_bot:
-        # A bot left, handle accordingly
-        await context.bot.send_message(LOG_CHANNEL, f"Bot {user.username} left chat {chat_id}.")
-    else:
-        # A user left, handle accordingly (e.g., log it)
-        await context.bot.send_message(LOG_CHANNEL, f"User {user.first_name} left chat {chat_id}.")
-
-async def chat_member_update_handler(update: Update, context: CallbackContext) -> None:
-    """Handles chat member updates, such as a user being banned or unbanned."""
-    chat_id = update.effective_chat.id
-    user = update.chat_member.new_chat_member.user
-    status = update.chat_member.new_chat_member.status
-
-    if status == "kicked":
-        # User was banned
-        await context.bot.send_message(LOG_CHANNEL, f"User {user.first_name} was banned from chat {chat_id}.")
-    elif status == "member":
-        # User was unbanned or rejoined
-        await context.bot.send_message(LOG_CHANNEL, f"User {user.first_name} rejoined chat {chat_id}.")
-
-async def button_callback(update: Update, context: CallbackContext) -> None:
-    query = update.callback_query
-    await query.answer()  # Acknowledge the callback
-
-    data = query.data
-    chat_id = update.effective_chat.id
-    user_id = update.effective_user.id
-
-    if data.startswith("set_language:"):
-        lang = data.split(":")[1]
-        context.user_data["language"] = lang
-        await query.edit_message_text(f"Language set to {LANGUAGE_OPTIONS[lang]}!")
-
-    elif data == "set_personality":
-        if user_id not in ADMIN_IDS:
-            await query.answer("Only admins can set the personality.", show_alert=True)
-            return
-        keyboard = [
-            [InlineKeyboardButton(text=personality.capitalize(), callback_data=f"personality:{key}")] for key, personality in ANIME_GIRL_PERSONALITIES.items()
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("Choose the bot's personality:", reply_markup=reply_markup)
-
-    elif data.startswith("personality:"):
-        if user_id not in ADMIN_IDS:
-            await query.answer("Only admins can set the personality.", show_alert=True)
-            return
-        personality = data.split(":")[1]
-        group_settings[chat_id] = group_settings.get(chat_id, {})
-        group_settings[chat_id]["personality"] = personality
-        await query.edit_message_text(f"Bot personality set to {personality}.")
-
-    elif data == "set_filter_level":
-        if user_id not in ADMIN_IDS:
-            await query.answer("Only admins can set the filter level.", show_alert=True)
-            return
-        keyboard = [
-            [InlineKeyboardButton(text="Low", callback_data="filter:low")],
-            [InlineKeyboardButton(text="Moderate", callback_data="filter:moderate")],
-            [InlineKeyboardButton(text="High", callback_data="filter:high")],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("Choose the filter level:", reply_markup=reply_markup)
-
-    elif data.startswith("filter:"):
-        if user_id not in ADMIN_IDS:
-            await query.answer("Only admins can set the filter level.", show_alert=True)
-            return
-        filter_level = data.split(":")[1]
-        group_settings[chat_id] = group_settings.get(chat_id, {})
-        group_settings[chat_id]["filter_level"] = filter_level
-        await query.edit_message_text(f"Filter level set to {filter_level}.")
-
-def error_handler(update: object, context: CallbackContext) -> None:
-    logger.error(msg="Exception while handling an update:", exc_info=context.error)
-    try:
-        # Collect error information
-        tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
-        tb_string = ''.join(tb_list)
-
-        # Build the message
-        message = (
-            f'An exception was raised while handling an update:\n'
-            f'<pre>update = {html.escape(str(update.to_dict()), quote=False)}</pre>\n'
-            f'<pre>context.chat_data = {html.escape(str(context.chat_data), quote=False)}</pre>\n'
-            f'<pre>context.user_
-        
