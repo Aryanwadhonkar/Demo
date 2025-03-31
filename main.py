@@ -8,6 +8,7 @@ import requests
 import html
 import traceback
 import json  # For handling JSON data
+import random
 from functools import wraps
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatMember, ChatMemberUpdated, BotCommand, ParseMode
@@ -327,6 +328,192 @@ async def language(update: Update, context: CallbackContext) -> None:
     else:
       await update.message.reply_text("Invalid Language")
 
+async def report(update: Update, context: CallbackContext) -> None:
+    """Handles user reports and feature requests."""
+    user_id = update.effective_user.id
+    message = " ".join(context.args)
+
+    if not message:
+        await update.message.reply_text("Please provide a report or feature request after the /report command.")
+        return
+
+    report_text = f"Report from user {user_id}:\n{message}"
+    try:
+        await context.bot.send_message(chat_id=LOG_CHANNEL, text=report_text)  # Send to log channel for review
+        await context.bot.send_message(chat_id=DEVELOPER_CHAT_ID, text=report_text) # Send report to developer
+        await update.message.reply_text("Your report has been submitted. Thank you!")
+    except TelegramError as e:
+        logger.error("Error sending report: " + str(e))
+        await update.message.reply_text("Failed to submit your report. Please try again later.")
+
+#chunk2
+async def funfact(update: Update, context: CallbackContext) -> None:
+    """Handles the /funfact command with personality."""
+    chat_id = update.effective_chat.id
+    personality = group_settings.get(chat_id, {}).get("personality", "makima")
+
+    try:
+        response = requests.get("https://uselessfacts.jsph.pl/random.json?language=en", timeout=5)
+        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+        data = response.json()
+        fun_fact = data.get("text", "Could not retrieve a fun fact at this time.")
+
+        if personality == "makima":
+            fun_fact_response = f"Interesting. Did you know this: {fun_fact}? Make sure you remember it."
+        elif personality == "random":
+            fun_fact_response = f"Did you know this: {fun_fact}"
+        else:
+            fun_fact_response = fun_fact
+        await update.message.reply_text(fun_fact_response)
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching fun fact: {e}")
+        await update.message.reply_text("Failed to retrieve a fun fact. Please try again later.")
+
+async def advice(update: Update, context: CallbackContext) -> None:
+    """Handles the /advice command with personality."""
+    chat_id = update.effective_chat.id
+    personality = group_settings.get(chat_id, {}).get("personality", "makima")
+
+    try:
+        response = requests.get("https://api.adviceslip.com/advice", timeout=5)
+        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+        data = response.json()
+        advice_text = data.get("slip", {}).get("advice", "Could not retrieve advice at this time.")
+
+        if personality == "makima":
+            advice_response = f"Listen closely. This is the advice I give you: {advice_text} Heed it well."
+        elif personality == "random":
+          advice_response = f"Here is a piece of advice: {advice_text}"
+        else:
+            advice_response = advice_text
+
+        await update.message.reply_text(advice_response)
+
+async def coinflip(update: Update, context: CallbackContext) -> None:
+    """Handles the /coinflip command."""
+    result = random.choice(["Heads", "Tails"])
+    await update.message.reply_text(f"The coin landed on: {result}")
+
+async def roll(update: Update, context: CallbackContext) -> None:
+    """Handles the /roll command."""
+    result = random.randint(1, 6)
+    await update.message.reply_text(f"You rolled a: {result}")
+
+async def meme(update: Update, context: CallbackContext) -> None:
+    """Handles the /meme command."""
+    try:
+        response = requests.get("https://meme-api.com/gimme", timeout=5)
+        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+        data = response.json()
+        meme_url = data.get("url", None)
+
+        if meme_url:
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=meme_url)
+        else:
+            await update.message.reply_text("Could not retrieve a meme at this time.")
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching meme: {e}")
+        await update.message.reply_text("Failed to retrieve a meme. Please try again later.")
+
+async def joke(update: Update, context: CallbackContext) -> None:
+    """Handles the /joke command."""
+    try:
+        response = requests.get("https://v2.jokeapi.dev/joke/Any?blacklistFlags=nsfw,racist,sexist,explicit&safe-mode", timeout=5)
+        response.raise_for_status()
+        data = response.json()
+
+        if data["type"] == "single":
+            joke = data["joke"]
+        else:
+            joke = f"{data['setup']}\n\n{data['delivery']}"
+
+        await update.message.reply_text(joke)
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching joke: {e}")
+        await update.message.reply_text("Failed to retrieve a joke. Please try again later.")
+        #chunk3
+
+async def group_message_handler(update: Update, context: CallbackContext) -> None:
+    """Handles messages in group chats, applying the configured personality and filter."""
+    chat_id = update.effective_chat.id
+    user_id = update.effective_user.id  # Get user ID
+    text = update.message.text
+
+    # Anti-flood mechanism
+    now = time.time()
+    if user_id in user_message_counts:
+        if now - user_message_counts[user_id]['timestamp'] < ANTI_FLOOD_COOLDOWN:
+            user_message_counts[user_id]['count'] += 1
+            if user_message_counts[user_id]['count'] > SPAM_THRESHOLD:
+                try:
+                    await context.bot.ban_chat_member(chat_id, user_id)
+                    await update.message.reply_text(f"User {update.effective_user.first_name} banned for spamming.")
+                    logger.info(f"User {user_id} banned for spamming in chat {chat_id}")
+                except TelegramError as e:
+                    logger.error(f"Error banning user {user_id}: {e}")
+                return  # Stop processing message
+
+        else:
+            # Reset count if cooldown has passed
+            user_message_counts[user_id] = {'count': 1, 'timestamp': now}
+    else:
+        user_message_counts[user_id] = {'count': 1, 'timestamp': now}
+
+    settings = group_settings.get(chat_id, {})
+    personality = settings.get("personality", "makima")  # Default to Makima
+    filter_level = settings.get("filter_level", "moderate")  # Default to moderate
+
+    # --- PERSONALITY ---
+    if personality and text:
+        if personality in ANIME_GIRL_PERSONALITIES:
+            personality_text = ANIME_GIRL_PERSONALITIES[personality]
+            # Basic personality-based response (customize as needed)
+
+            if personality == "makima":
+                if "hello" in text.lower():
+                    response_text = f"{personality_text} Good, you recognize my authority."
+                elif "thank you" in text.lower():
+                    response_text = f"{personality_text} You're welcome. Your gratitude is expected."
+                elif "help" in text.lower():
+                    response_text = f"{personality_text} Obey my commands, and you won't need help."
+                else:
+                    response_text = f"{personality_text} Speak when spoken to."
+
+            elif personality == "random":
+                # Random personality response (add more as desired)
+                import random
+                available_personalities = list(ANIME_GIRL_PERSONALITIES.keys())
+                chosen_personality = random.choice(available_personalities)
+                personality_text = ANIME_GIRL_PERSONALITIES[chosen_personality]
+                response_text = f"*{chosen_personality.capitalize()}* {personality_text}"  # Add a personality indicator
+
+            else:
+                if "hello" in text.lower():
+                    response_text = f"{personality_text} Hmph, don't think I'm happy you greeted me!"
+                elif "thank you" in text.lower():
+                    response_text = f"{personality_text} It's not like I did it for you or anything!"
+                else:
+                    response_text = f"{personality_text} What do you want?"
+
+            await update.message.reply_text(response_text)
+    # --- END PERSONALITY ---
+
+    # --- AUTO FILTER ---
+    if filter_level:
+        # Basic profanity filter (expand as needed)
+        profane_words = ["badword1", "badword2", "badword3"]  # Replace with actual words
+        if any(word in text.lower() for word in profane_words):
+            if filter_level == "high":
+                await update.message.delete()
+                await context.bot.send_message(chat_id, "Profanity is not allowed.")
+            elif filter_level == "moderate":
+                # Mild warning
+                await context.bot.send_message(chat_id, "Please refrain from using inappropriate language.")
+    # --- END AUTO FILTER ---
+
 async def post_initializer(application: Application) -> None:
     commands = [
         BotCommand("start", "Start the bot"),
@@ -342,6 +529,11 @@ async def post_initializer(application: Application) -> None:
         BotCommand("report", "Report a problem or request a feature"),
         BotCommand("funfact", "Get a random fun fact"),  # New command
         BotCommand("advice", "Get some advice"),  # New command
+        BotCommand("coinflip", "Flip a coin!"), # New fun command
+        BotCommand("roll", "Roll a dice!"),# New Fun Command
+        BotCommand("meme", "Get a random meme"), # New Fun Command
+        BotCommand("joke", "Tell me a joke!"),# New Fun Command
+
     ]
     await application.bot.set_my_commands(commands)
 
@@ -440,126 +632,6 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         group_settings[chat_id]["filter_level"] = filter_level
         await query.edit_message_text(f"Filter level set to {filter_level}.")
 
-async def group_message_handler(update: Update, context: CallbackContext) -> None:
-    """Handles messages in group chats, applying the configured personality and filter."""
-    chat_id = update.effective_chat.id
-    user_id = update.effective_user.id  # Get user ID
-    text = update.message.text
-
-    # Anti-flood mechanism
-    now = time.time()
-    if user_id in user_message_counts:
-        if now - user_message_counts[user_id]['timestamp'] < ANTI_FLOOD_COOLDOWN:
-            user_message_counts[user_id]['count'] += 1
-            if user_message_counts[user_id]['count'] > SPAM_THRESHOLD:
-                try:
-                    await context.bot.ban_chat_member(chat_id, user_id)
-                    await update.message.reply_text(f"User {update.effective_user.first_name} banned for spamming.")
-                    logger.info(f"User {user_id} banned for spamming in chat {chat_id}")
-                except TelegramError as e:
-                    logger.error(f"Error banning user {user_id}: {e}")
-                return  # Stop processing message
-
-        else:
-            # Reset count if cooldown has passed
-            user_message_counts[user_id] = {'count': 1, 'timestamp': now}
-    else:
-        user_message_counts[user_id] = {'count': 1, 'timestamp': now}
-
-    settings = group_settings.get(chat_id, {})
-    personality = settings.get("personality", "makima")  # Default to Makima
-    filter_level = settings.get("filter_level", "moderate")  # Default to moderate
-
-    # --- PERSONALITY ---
-    if personality and text:
-        if personality in ANIME_GIRL_PERSONALITIES:
-            personality_text = ANIME_GIRL_PERSONALITIES[personality]
-            # Basic personality-based response (customize as needed)
-
-            if personality == "makima":
-                if "hello" in text.lower():
-                    response_text = f"{personality_text} Good, you recognize my authority."
-                elif "thank you" in text.lower():
-                    response_text = f"{personality_text} You're welcome. Your gratitude is expected."
-                elif "help" in text.lower():
-                    response_text = f"{personality_text} Obey my commands, and you won't need help."
-                else:
-                    response_text = f"{personality_text} Speak when spoken to."
-
-            elif personality == "random":
-                # Random personality response (add more as desired)
-                import random
-                available_personalities = list(ANIME_GIRL_PERSONALITIES.keys())
-                chosen_personality = random.choice(available_personalities)
-                personality_text = ANIME_GIRL_PERSONALITIES[chosen_personality]
-                response_text = f"*{chosen_personality.capitalize()}* {personality_text}"  # Add a personality indicator
-
-            else:
-                if "hello" in text.lower():
-                    response_text = f"{personality_text} Hmph, don't think I'm happy you greeted me!"
-                elif "thank you" in text.lower():
-                    response_text = f"{personality_text} It's not like I did it for you or anything!"
-                else:
-                    response_text = f"{personality_text} What do you want?"
-
-            await update.message.reply_text(response_text)
-    # --- END PERSONALITY ---
-
-    # --- AUTO FILTER ---
-    if filter_level:
-        # Basic profanity filter (expand as needed)
-        profane_words = ["badword1", "badword2", "badword3"]  # Replace with actual words
-        if any(word in text.lower() for word in profane_words):
-            if filter_level == "high":
-                await update.message.delete()
-                await context.bot.send_message(chat_id, "Profanity is not allowed.")
-            elif filter_level == "moderate":
-                # Mild warning
-                await context.bot.send_message(chat_id, "Please refrain from using inappropriate language.")
-    # --- END AUTO FILTER ---
-
-async def report(update: Update, context: CallbackContext) -> None:
-    """Handles user reports and feature requests."""
-    user_id = update.effective_user.id
-    message = " ".join(context.args)
-
-    if not message:
-        await update.message.reply_text("Please provide a report or feature request after the /report command.")
-        return
-
-    report_text = f"Report from user {user_id}:\n{message}"
-    try:
-        await context.bot.send_message(chat_id=LOG_CHANNEL, text=report_text)  # Send to log channel for review
-        await context.bot.send_message(chat_id=DEVELOPER_CHAT_ID, text=report_text) # Send report to developer
-        await update.message.reply_text("Your report has been submitted. Thank you!")
-    except TelegramError as e:
-        logger.error("Error sending report: " + str(e))
-        await update.message.reply_text("Failed to submit your report. Please try again later.")
-
-async def funfact(update: Update, context: CallbackContext) -> None:
-    """Handles the /funfact command."""
-    try:
-        response = requests.get("https://uselessfacts.jsph.pl/random.json?language=en", timeout=5)
-        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
-        data = response.json()
-        fun_fact = data.get("text", "Could not retrieve a fun fact at this time.")
-        await update.message.reply_text(fun_fact)
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error fetching fun fact: {e}")
-        await update.message.reply_text("Failed to retrieve a fun fact. Please try again later.")
-
-async def advice(update: Update, context: CallbackContext) -> None:
-    """Handles the /advice command."""
-    try:
-        response = requests.get("https://api.adviceslip.com/advice", timeout=5)
-        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
-        data = response.json()
-        advice_text = data.get("slip", {}).get("advice", "Could not retrieve advice at this time.")
-        await update.message.reply_text(advice_text)
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error fetching advice: {e}")
-        await update.message.reply_text("Failed to retrieve advice. Please try again later.")
-
 def error_handler(update: object, context: CallbackContext) -> None:
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
     try:
@@ -572,52 +644,5 @@ def error_handler(update: object, context: CallbackContext) -> None:
             f'An exception was raised while handling an update:\n'
             f'<pre>update = {html.escape(str(update.to_dict()), quote=False)}</pre>\n'
             f'<pre>context.chat_data = {html.escape(str(context.chat_data), quote=False)}</pre>\n'
-            f'<pre>context.user_data = {html.escape(str(context.user_data), quote=False)}</pre>\n'
-            f'<pre>{html.escape(tb_string, quote=False)}</pre>'
-        )
-
-        # Shorten the message if it's too long
-        if len(message) > 4096:
-            message = message[:4000] + '\n... (message truncated)'
-
-        # Send the message to the developer
-        context.bot.send_message(chat_id=DEVELOPER_CHAT_ID, text=message, parse_mode=ParseMode.HTML)
-
-    except Exception as ex:
-        logger.error("Failed to send error message to developer: %s", str(ex))
-
-def main() -> None:
-    check_credit()
-    print_ascii_art()
-
-    # Set up rate limiter for flood protection
-    rate_limiter = AIORateLimiter(max_retries=3)
-
-    application = Application.builder().token(BOT_TOKEN).rate_limiter(rate_limiter).build()
-
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("getlink", getlink))
-    application.add_handler(CommandHandler("firstbatch", firstbatch))
-    application.add_handler(CommandHandler("lastbatch", lastbatch))
-    application.add_handler(CommandHandler("broadcast", broadcast))
-    application.add_handler(CommandHandler("stats", stats))
-    application.add_handler(CommandHandler("ban", ban))
-    application.add_handler(CommandHandler("premiummembers", premiummembers))
-    application.add_handler(CommandHandler("restart", restart))
-    application.add_handler(CommandHandler("language", language))
-    application.add_handler(CommandHandler("report", report))  # Add the report command handler
-    application.add_handler(CommandHandler("funfact", funfact))  # Add the funfact command
-    application.add_handler(CommandHandler("advice", advice))  # Add the advice command
-
-    application.add_handler(MessageHandler(filters.ALL & filters.ChatType.PRIVATE, batch_file_handler))
-    application.add_handler(CallbackQueryHandler(button_callback)) # handles button presses
-    application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUP, group_message_handler))
-    application.add_handler(ChatMemberHandler(new_member_handler, ChatMemberHandler.CHAT_MEMBERS))
-    application.add_handler(ChatMemberHandler(left_member_handler, ChatMemberHandler.CHAT_MEMBERS))
-    application.add_handler(ChatMemberHandler(chat_member_update_handler, ChatMemberHandler.CHAT_MEMBER))
-    application.add_error_handler(error_handler)
-    application.run_polling(post_init=post_initializer)
-
-if __name__ == '__main__':
-    main()
+            f'<pre>context.user_
         
