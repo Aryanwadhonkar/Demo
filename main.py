@@ -1,11 +1,11 @@
 import os
 import logging
 from telegram.ext import Application
-
-from config import settings  # Import settings from config.py
-from handlers import basic, admin, fun, group  # Import handlers
-from utils import helpers  # Import helper functions
+from config import settings
+from handlers import basic, admin, fun, gro>
+from utils import helpers
 from telegram.ext import AIORateLimiter
+from telegram import Update
 
 # Enable logging
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
