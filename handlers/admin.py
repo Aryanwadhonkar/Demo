@@ -2,7 +2,8 @@ import uuid
 import time
 import logging
 from functools import wraps
-from telegram import Update, TelegramError, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import TelegramError
 from telegram.ext import CommandHandler, CallbackContext
 
 from config import settings
@@ -40,7 +41,7 @@ async def getlink(update: Update, context: CallbackContext) -> None:
     try:
         forwarded = await context.bot.forward_message(chat_id=settings.DB_CHANNEL, from_chat_id=msg.chat.id, message_id=msg.message_id)
         token = str(uuid.uuid4())[:8]
-        #tokens[token] = {"data": forwarded.message_id, "timestamp": time.time(), "type": "single"}
+       # tokens[token] = {"data": forwarded.message_id, "timestamp": time.time(), "type": "single"}
         special_link = f"https://t.me/{context.bot.username}?start={token}"
         special_link = helpers.shorten_url(special_link)
         await update.message.reply_text(f"File stored!\nToken Link: {special_link}", disable_web_page_preview=True)
@@ -75,7 +76,7 @@ async def lastbatch(update: Update, context: CallbackContext) -> None:
     special_link = helpers.shorten_url(special_link)
     await update.message.reply_text(f"Batch stored!\nToken Link: {special_link}", disable_web_page_preview=True)
     await context.bot.send_message(chat_id=settings.LOG_CHANNEL, text=f"Admin {update.effective_user.id} stored a batch. Token: {token}")
-    context.user_data["batch_files"] = []  # Reset batch mode
+    context.user_data["batch_files"] = [] # Reset batch mode
 
 @admin_only
 async def broadcast(update: Update, context: CallbackContext) -> None:
@@ -150,3 +151,4 @@ stats_handler = CommandHandler("stats", stats)
 ban_handler = CommandHandler("ban", ban)
 premiummembers_handler = CommandHandler("premiummembers", premiummembers)
 restart_handler = CommandHandler("restart", restart)
+    
