@@ -526,3 +526,45 @@ async def post_initializer(application: Application) -> None:
         BotCommand("restart", "Restart the bot"),
 Now, here's the completed `requirements.txt`:
 
+              except TelegramError as e:
+            logger.error("Failed to send error message to developer: %s", str(ex))
+
+def main() -> None:
+    check_credit()
+    print_ascii_art()
+
+    # Set up rate limiter for flood protection
+    rate_limiter = AIORateLimiter(max_retries=3)
+
+    application = Application.builder().token(BOT_TOKEN).rate_limiter(rate_limiter).build()
+
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("getlink", getlink))
+    application.add_handler(CommandHandler("firstbatch", firstbatch))
+    application.add_handler(CommandHandler("lastbatch", lastbatch))
+    application.add_handler(CommandHandler("broadcast", broadcast))
+    application.add_handler(CommandHandler("stats", stats))
+    application.add_handler(CommandHandler("ban", ban))
+    application.add_handler(CommandHandler("premiummembers", premiummembers))
+    application.add_handler(CommandHandler("restart", restart))
+    application.add_handler(CommandHandler("language", language))
+    application.add_handler(CommandHandler("report", report))  # Add the report command handler
+    application.add_handler(CommandHandler("funfact", funfact))  # Add the funfact command
+    application.add_handler(CommandHandler("advice", advice))  # Add the advice command
+    application.add_handler(CommandHandler("coinflip", coinflip)) # Add coinflip command
+    application.add_handler(CommandHandler("roll", roll)) # Add roll command
+    application.add_handler(CommandHandler("meme", meme))  # Add meme command
+    application.add_handler(CommandHandler("joke", joke)) # Add joke command
+
+    application.add_handler(MessageHandler(filters.ALL & filters.ChatType.PRIVATE, batch_file_handler))
+    application.add_handler(CallbackQueryHandler(button_callback)) # handles button presses
+    application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUP, group_message_handler))
+    application.add_handler(ChatMemberHandler(new_member_handler, ChatMemberHandler.CHAT_MEMBERS))
+    application.add_handler(ChatMemberHandler(left_member_handler, ChatMemberHandler.CHAT_MEMBERS))
+    application.add_handler(ChatMemberHandler(chat_member_update_handler, ChatMemberHandler.CHAT_MEMBER))
+    application.add_error_handler(error_handler)
+    application.run_polling(post_init=post_initializer)
+
+if __name__ == '__main__':
+    main()
+
