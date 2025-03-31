@@ -17,4 +17,4 @@ def shorten_url(long_url: str) -> str:
     except Exception as e:
         logger.error("URL shortening failed: " + str(e))
         return long_url
-      
+        
