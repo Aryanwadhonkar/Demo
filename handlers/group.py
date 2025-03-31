@@ -1,6 +1,7 @@
 import logging
 import time
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import TelegramError
 from telegram.ext import MessageHandler, filters, CallbackContext, ChatMemberHandler
 
 from config import settings
@@ -39,8 +40,8 @@ async def group_message_handler(update: Update, context: CallbackContext) -> Non
 
     # --- PERSONALITY ---
     if personality and text:
-        if personality in ANIME_GIRL_PERSONALITIES:
-            personality_text = ANIME_GIRL_PERSONALITIES[personality]
+        if personality in settings.ANIME_GIRL_PERSONALITIES:
+            personality_text = settings.ANIME_GIRL_PERSONALITIES[personality]
             # Basic personality-based response (customize as needed)
 
             if personality == "makima":
@@ -56,9 +57,9 @@ async def group_message_handler(update: Update, context: CallbackContext) -> Non
             elif personality == "random":
                 # Random personality response (add more as desired)
                 import random
-                available_personalities = list(ANIME_GIRL_PERSONALITIES.keys())
+                available_personalities = list(settings.ANIME_GIRL_PERSONALITIES.keys())
                 chosen_personality = random.choice(available_personalities)
-                personality_text = ANIME_GIRL_PERSONALITIES[chosen_personality]
+                personality_text = settings.ANIME_GIRL_PERSONALITIES[chosen_personality]
                 response_text = f"*{chosen_personality.capitalize()}* {personality_text}"  # Add a personality indicator
 
             else:
@@ -108,10 +109,10 @@ async def left_member_handler(update: Update, context: CallbackContext) -> None:
     # Check if a user or bot left
     if user.is_bot:
         # A bot left, handle accordingly
-        await context.bot.send_message(LOG_CHANNEL, f"Bot {user.username} left chat {chat_id}.")
+        await context.bot.send_message(settings.LOG_CHANNEL, f"Bot {user.username} left chat {chat_id}.")
     else:
         # A user left, handle accordingly (e.g., log it)
-        await context.bot.send_message(LOG_CHANNEL, f"User {user.first_name} left chat {chat_id}.")
+        await context.bot.send_message(settings.LOG_CHANNEL, f"User {user.first_name} left chat {chat_id}.")
 
 async def chat_member_update_handler(update: Update, context: CallbackContext) -> None:
     """Handles chat member updates, such as a user being banned or unbanned."""
@@ -121,13 +122,13 @@ async def chat_member_update_handler(update: Update, context: CallbackContext) -
 
     if status == "kicked":
         # User was banned
-        await context.bot.send_message(LOG_CHANNEL, f"User {user.first_name} was banned from chat {chat_id}.")
+        await context.bot.send_message(settings.LOG_CHANNEL, f"User {user.first_name} was banned from chat {chat_id}.")
     elif status == "member":
         # User was unbanned or rejoined
-        await context.bot.send_message(LOG_CHANNEL, f"User {user.first_name} rejoined chat {chat_id}.")
+        await context.bot.send_message(settings.LOG_CHANNEL, f"User {user.first_name} rejoined chat {chat_id}.")
 
+from telegram.ext import ChatMemberHandler, MessageHandler, filters
 group_message_handler = MessageHandler(filters.TEXT & filters.ChatType.GROUP, group_message_handler)
-new_member_handler = ChatMemberHandler(new_member_handler, ChatMemberHandler.CHAT_MEMBERS)
-left_member_handler = ChatMemberHandler(left_member_handler, ChatMemberHandler.CHAT_MEMBERS)
+new_member_handler = ChatMemberHandler(new_member_handler, ChatMemberHandler.CHAT_MEMBER)
+left_member_handler = ChatMemberHandler(left_member_handler, ChatMemberHandler.CHAT_MEMBER)
 chat_member_update_handler = ChatMemberHandler(chat_member_update_handler, ChatMemberHandler.CHAT_MEMBER)
-  
