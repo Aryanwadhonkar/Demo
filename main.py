@@ -7,6 +7,7 @@ import asyncio
 import requests
 import html
 import traceback
+import json  # For handling JSON data
 from functools import wraps
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatMember, ChatMemberUpdated, BotCommand, ParseMode
@@ -18,6 +19,7 @@ from telegram.ext import (
     filters,
     ChatMemberHandler,
     CallbackQueryHandler,
+    AIORateLimiter,
 )
 from telegram.error import TelegramError
 
@@ -28,6 +30,10 @@ DB_CHANNEL = int(os.getenv("DB_CHANNEL"))
 LOG_CHANNEL = int(os.getenv("LOG_CHANNEL"))
 FORCE_SUB = os.getenv("FORCE_SUB", "0")
 DEVELOPER_CHAT_ID = int(os.getenv("DEVELOPER_CHAT_ID", "0"))  # Add this to your .env
+API_ID = os.getenv("API_ID")  # Add this to your .env
+API_HASH = os.getenv("API_HASH")  # Add this to your .env
+ANTI_FLOOD_COOLDOWN = int(os.getenv("ANTI_FLOOD_COOLDOWN", "3"))
+SPAM_THRESHOLD = int(os.getenv("SPAM_THRESHOLD", "5"))  # Number of messages to consider spam
 
 if FORCE_SUB != "0":
     try:
@@ -56,6 +62,8 @@ ANIME_GIRL_PERSONALITIES = {
     "yandere": "I am obsessively in love with you.",
     "kuudere": "I am calm, collected, and emotionless.",
     "dandere": "I am shy and quiet, but I open up.",
+    "makima": "I expect absolute obedience. Are you ready to serve?",  # Makima
+    "random": "I am a mix of all personalities.",  # Mix personality
 }
 # --- END CONFIGURATION ---
 
@@ -66,6 +74,7 @@ tokens = {}  # token -> { 'data': file_id or [file_ids], 'timestamp': unix_time,
 banned_users = set()
 premium_members = set()
 group_settings = {}  # chat_id -> {'personality': 'tsundere', 'filter_level': 'moderate'}
+user_message_counts = {}  # user_id -> {'count': int, 'timestamp': float} for anti-flood
 # --- END GLOBAL DATA ---
 
 def check_credit():
@@ -330,7 +339,9 @@ async def post_initializer(application: Application) -> None:
         BotCommand("premiummembers", "Manage premium members (admin only)"),
         BotCommand("restart", "Restart the bot (admin only)"),
         BotCommand("language", "Set your language"),
-        BotCommand("report", "Report a problem or request a feature"),  # Added command
+        BotCommand("report", "Report a problem or request a feature"),
+        BotCommand("funfact", "Get a random fun fact"),  # New command
+        BotCommand("advice", "Get some advice"),  # New command
     ]
     await application.bot.set_my_commands(commands)
 
@@ -432,10 +443,31 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
 async def group_message_handler(update: Update, context: CallbackContext) -> None:
     """Handles messages in group chats, applying the configured personality and filter."""
     chat_id = update.effective_chat.id
+    user_id = update.effective_user.id  # Get user ID
     text = update.message.text
 
+    # Anti-flood mechanism
+    now = time.time()
+    if user_id in user_message_counts:
+        if now - user_message_counts[user_id]['timestamp'] < ANTI_FLOOD_COOLDOWN:
+            user_message_counts[user_id]['count'] += 1
+            if user_message_counts[user_id]['count'] > SPAM_THRESHOLD:
+                try:
+                    await context.bot.ban_chat_member(chat_id, user_id)
+                    await update.message.reply_text(f"User {update.effective_user.first_name} banned for spamming.")
+                    logger.info(f"User {user_id} banned for spamming in chat {chat_id}")
+                except TelegramError as e:
+                    logger.error(f"Error banning user {user_id}: {e}")
+                return  # Stop processing message
+
+        else:
+            # Reset count if cooldown has passed
+            user_message_counts[user_id] = {'count': 1, 'timestamp': now}
+    else:
+        user_message_counts[user_id] = {'count': 1, 'timestamp': now}
+
     settings = group_settings.get(chat_id, {})
-    personality = settings.get("personality", "tsundere")  # Default to tsundere
+    personality = settings.get("personality", "makima")  # Default to Makima
     filter_level = settings.get("filter_level", "moderate")  # Default to moderate
 
     # --- PERSONALITY ---
@@ -443,13 +475,33 @@ async def group_message_handler(update: Update, context: CallbackContext) -> Non
         if personality in ANIME_GIRL_PERSONALITIES:
             personality_text = ANIME_GIRL_PERSONALITIES[personality]
             # Basic personality-based response (customize as needed)
-            if "hello" in text.lower():
-                response_text = f"{personality_text} Hmph, don't think I'm happy you greeted me!"
-            elif "thank you" in text.lower():
-                response_text = f"{personality_text} It's not like I did it for you or anything!"
+
+            if personality == "makima":
+                if "hello" in text.lower():
+                    response_text = f"{personality_text} Good, you recognize my authority."
+                elif "thank you" in text.lower():
+                    response_text = f"{personality_text} You're welcome. Your gratitude is expected."
+                elif "help" in text.lower():
+                    response_text = f"{personality_text} Obey my commands, and you won't need help."
+                else:
+                    response_text = f"{personality_text} Speak when spoken to."
+
+            elif personality == "random":
+                # Random personality response (add more as desired)
+                import random
+                available_personalities = list(ANIME_GIRL_PERSONALITIES.keys())
+                chosen_personality = random.choice(available_personalities)
+                personality_text = ANIME_GIRL_PERSONALITIES[chosen_personality]
+                response_text = f"*{chosen_personality.capitalize()}* {personality_text}"  # Add a personality indicator
+
             else:
-                # Placeholder response
-                response_text = f"{personality_text} What do you want?"
+                if "hello" in text.lower():
+                    response_text = f"{personality_text} Hmph, don't think I'm happy you greeted me!"
+                elif "thank you" in text.lower():
+                    response_text = f"{personality_text} It's not like I did it for you or anything!"
+                else:
+                    response_text = f"{personality_text} What do you want?"
+
             await update.message.reply_text(response_text)
     # --- END PERSONALITY ---
 
@@ -484,6 +536,30 @@ async def report(update: Update, context: CallbackContext) -> None:
         logger.error("Error sending report: " + str(e))
         await update.message.reply_text("Failed to submit your report. Please try again later.")
 
+async def funfact(update: Update, context: CallbackContext) -> None:
+    """Handles the /funfact command."""
+    try:
+        response = requests.get("https://uselessfacts.jsph.pl/random.json?language=en", timeout=5)
+        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+        data = response.json()
+        fun_fact = data.get("text", "Could not retrieve a fun fact at this time.")
+        await update.message.reply_text(fun_fact)
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching fun fact: {e}")
+        await update.message.reply_text("Failed to retrieve a fun fact. Please try again later.")
+
+async def advice(update: Update, context: CallbackContext) -> None:
+    """Handles the /advice command."""
+    try:
+        response = requests.get("https://api.adviceslip.com/advice", timeout=5)
+        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+        data = response.json()
+        advice_text = data.get("slip", {}).get("advice", "Could not retrieve advice at this time.")
+        await update.message.reply_text(advice_text)
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching advice: {e}")
+        await update.message.reply_text("Failed to retrieve advice. Please try again later.")
+
 def error_handler(update: object, context: CallbackContext) -> None:
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
     try:
@@ -513,7 +589,12 @@ def error_handler(update: object, context: CallbackContext) -> None:
 def main() -> None:
     check_credit()
     print_ascii_art()
-    application = Application.builder().token(BOT_TOKEN).build()
+
+    # Set up rate limiter for flood protection
+    rate_limiter = AIORateLimiter(max_retries=3)
+
+    application = Application.builder().token(BOT_TOKEN).rate_limiter(rate_limiter).build()
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("getlink", getlink))
     application.add_handler(CommandHandler("firstbatch", firstbatch))
@@ -525,6 +606,9 @@ def main() -> None:
     application.add_handler(CommandHandler("restart", restart))
     application.add_handler(CommandHandler("language", language))
     application.add_handler(CommandHandler("report", report))  # Add the report command handler
+    application.add_handler(CommandHandler("funfact", funfact))  # Add the funfact command
+    application.add_handler(CommandHandler("advice", advice))  # Add the advice command
+
     application.add_handler(MessageHandler(filters.ALL & filters.ChatType.PRIVATE, batch_file_handler))
     application.add_handler(CallbackQueryHandler(button_callback)) # handles button presses
     application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUP, group_message_handler))
@@ -536,3 +620,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+        
